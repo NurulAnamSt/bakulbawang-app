@@ -14,6 +14,7 @@ PRODUCT_IMAGE_DIR = "assets/products/"
 
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin123"
+WHATSAPP_NUMBER = "6281234567890"
 
 # ====================== FUNGSI UTILITAS ======================
 def setup_files():
@@ -33,21 +34,19 @@ def setup_files():
             {
                 "id": 1,
                 "name": "Bawang Merah",
-                "price": 15000,
+                "price": 37905,
                 "stock": 100,
                 "description": "Bawang merah segar kualitas premium",
                 "category": "bawang",
-                "rating": 4.5,
                 "image": os.path.join(PRODUCT_IMAGE_DIR, "bawang_merah.jpg")
             },
             {
                 "id": 2,
                 "name": "Bibit Bawang Merah",
-                "price": 25000,
+                "price": 49999,
                 "stock": 50,
                 "description": "Bibit unggul siap tanam",
                 "category": "bibit",
-                "rating": 4.8,
                 "image": os.path.join(PRODUCT_IMAGE_DIR, "bibit_bawang.jpg")
             }
         ]
@@ -89,7 +88,7 @@ def save_to_json(file_path, data):
 # ====================== FUNGSI AUTHENTIKASI ======================
 def login_page():
     """Halaman login"""
-    st.title("🔐 Login Tukang Bawang")
+    st.title("🔐 Login Bakul Bawang")
     
     with st.form("login_form"):
         username = st.text_input("Username")
@@ -153,7 +152,6 @@ def display_product_card(product, index):
             try:
                 image_obj = Image.open(img_path) if os.path.exists(img_path) else Image.open(LOGO_PATH)
                 st.image(image_obj, width=150, use_container_width=True)   
-
             except:
                 st.image(Image.open(LOGO_PATH), width=150, use_container_width=True)
         
@@ -166,12 +164,8 @@ def display_product_card(product, index):
             else:
                 st.success(f"✅ Stok: {product['stock']} kg")
             
-            rating = product.get("rating", 4)
-            st.write("⭐" * int(rating) + "☆" * (5 - int(rating)))
-            
             st.caption(product["description"])
             
-            # Gunakan index untuk membuat key unik
             quantity = st.number_input(
                 "Jumlah (kg)",
                 min_value=1,
@@ -395,8 +389,9 @@ def show_checkout_success():
     Silakan lakukan pembayaran dan konfirmasi via WhatsApp:
     """)
     
+    whatsapp_url = f"https://wa.me/{WHATSAPP_NUMBER}?text=Halo%20Admin,%20saya%20telah%20melakukan%20pembayaran"
     if st.button("💬 Hubungi via WhatsApp", type="primary"):
-        webbrowser.open("https://wa.me/6281234567890")
+        webbrowser.open(whatsapp_url)
     
     if st.button("🏠 Kembali ke Beranda"):
         st.session_state.checkout_success = False
@@ -432,41 +427,44 @@ def show_admin_report():
         st.metric("Total Transaksi", total_transactions)
     
     st.subheader("Transaksi Terakhir")
-    for i, trans in enumerate(transactions[-5:]):
+    for trans in transactions[-5:]:
         with st.expander(f"📦 Pesanan #{trans['id']} - {trans['date']}"):
-            st.write(f"**Status:** {trans.get('status', 'pending').title()}")
-            st.write(f"**Customer:** {trans['customer']['name']}")
-            st.write(f"**Total:** Rp{trans['total']:,}")
+            cols = st.columns([3, 1])
+            with cols[0]:
+                st.write(f"**Status:** {trans.get('status', 'pending').title()}")
+                st.write(f"**Customer:** {trans['customer']['name']}")
+                st.write(f"**Total:** Rp{trans['total']:,}")
+                
+                st.write("**Items:**")
+                for item in trans["items"]:
+                    st.write(f"- {item['name']} ({item['quantity']}kg) @ Rp{item['price']:,}")
             
-            st.write("**Items:**")
-            for item in trans["items"]:
-                st.write(f"- {item['name']} ({item['quantity']}kg) @ Rp{item['price']:,}")
-            
-            # Gunakan kombinasi ID + index untuk key unik
-            if st.button(f"Update Status", key=f"status_{trans['id']}_{i}"):
-                update_transaction_status(trans["id"])
+            with cols[1]:
+                # Tombol untuk update status
+                if trans.get("status") == "pending":
+                    if st.button("✅ Selesaikan Transaksi", key=f"complete_{trans['id']}"):
+                        update_transaction_status(trans["id"], "completed")
+                else:
+                    if st.button("↪️ Kembalikan ke Pending", key=f"pending_{trans['id']}"):
+                        update_transaction_status(trans["id"], "pending")
+                
+                # Tombol WhatsApp
+                phone = trans['customer']['phone']
+                whatsapp_url = f"https://wa.me/{WHATSAPP_NUMBER}?text=Halo%20Admin,%20saya%20ingin%20konfirmasi%20pesanan%20#{trans['id']}"
+                st.link_button("💬 Hubungi Customer", whatsapp_url)
 
-def update_transaction_status(trans_id):
+def update_transaction_status(trans_id, new_status):
     """Update status transaksi"""
     transactions = load_from_json(TRANSACTIONS_FILE)
     
     for t in transactions:
         if t["id"] == trans_id:
-            # Gunakan timestamp untuk key unik
-            unique_key = f"status_{trans_id}_{datetime.now().timestamp()}"
-            new_status = st.selectbox(
-                "Status Baru:",
-                ["pending", "completed"],
-                index=0 if t.get("status") == "pending" else 1,
-                key=unique_key
-            )
-            
-            if st.button("Simpan Perubahan", key=f"save_{unique_key}"):
-                t["status"] = new_status
-                save_to_json(TRANSACTIONS_FILE, transactions)
-                st.success("Status transaksi diperbarui!")
-                st.rerun()
-            break
+            t["status"] = new_status
+            save_to_json(TRANSACTIONS_FILE, transactions)
+            st.success(f"Status transaksi #{trans_id} diubah menjadi {new_status}!")
+            st.rerun()
+    
+    st.error(f"Transaksi #{trans_id} tidak ditemukan")
 
 def manage_products():
     """Kelola produk"""
@@ -481,7 +479,6 @@ def manage_products():
             stock = st.number_input("Stok*", min_value=0)
         with cols[1]:
             category = st.selectbox("Kategori*", ["bawang", "bibit"])
-            rating = st.slider("Rating", 1.0, 5.0, 4.0, 0.1)
         
         description = st.text_area("Deskripsi Produk")
         uploaded_file = st.file_uploader("Gambar Produk (jpg/png)", type=["jpg", "png", "jpeg"])
@@ -503,7 +500,6 @@ def manage_products():
                     "stock": stock,
                     "description": description,
                     "category": category,
-                    "rating": rating,
                     "image": image_path
                 }
                 
@@ -520,7 +516,6 @@ def manage_products():
                 st.write(f"**Harga:** Rp{product['price']:,}")
                 st.write(f"**Stok:** {product['stock']} kg")
                 st.write(f"**Kategori:** {product['category'].title()}")
-                st.write(f"**Rating:** {product['rating']} ⭐")
             with cols[1]:
                 try:
                     st.image(
